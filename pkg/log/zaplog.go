@@ -42,20 +42,24 @@ func (z ZapLogger) Error(msg string) {
 	z.With().Debug(msg)
 }
 
+func (z ZapLogger) Print(v ...interface{}) {
+	z.With().Info(fmt.Sprint(v...))
+}
+
 func (z ZapLogger) Debugf(format string, v ...interface{}) {
-	z.With().Debug(fmt.Sprintf(format, v))
+	z.With().Debug(fmt.Sprintf(format, v...))
 }
 
 func (z ZapLogger) Infof(format string, v ...interface{}) {
-	z.With().Info(fmt.Sprintf(format, v))
+	z.With().Info(fmt.Sprintf(format, v...))
 }
 
 func (z ZapLogger) Errorf(format string, v ...interface{}) {
-	z.With().Error(fmt.Sprintf(format, v))
+	z.With().Error(fmt.Sprintf(format, v...))
 }
 
 func (z ZapLogger) Panicf(format string, v ...interface{}) {
-	z.With().Panic(fmt.Sprintf(format, v))
+	z.With().Panic(fmt.Sprintf(format, v...))
 }
 
 func (z ZapLogger) DebugField(msg string, fields ...zap.Field) {

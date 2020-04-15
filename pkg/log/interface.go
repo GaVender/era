@@ -2,6 +2,7 @@ package log
 
 type Logger interface {
 	Error(msg string)
+	Print(v ...interface{})
 
 	Debugf(format string, v ...interface{})
 	Infof(format string, v ...interface{})

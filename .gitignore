@@ -13,12 +13,6 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
-/.idea/dictionaries/lin.xml
-/.idea/.gitignore
-/.idea/era.iml
-/.idea/go.imports.xml
-/.idea/misc.xml
-/.idea/modules.xml
-/.idea/vcs.xml
-/.idea/watcherTasks.xml
+/.idea
+.idea
 /main.go

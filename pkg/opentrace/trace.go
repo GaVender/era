@@ -1,9 +1,10 @@
-package opentracing
+package opentrace
 
 import (
-	"github.com/GaVender/era/pkg/log"
 	"github.com/opentracing/opentracing-go"
 	jaegercfg "github.com/uber/jaeger-client-go/config"
+
+	"github.com/GaVender/era/pkg/log"
 )
 
 func NewTracer(project string, logger log.Logger, cfg jaegercfg.Configuration) (opentracing.Tracer, func()) {
@@ -12,7 +13,7 @@ func NewTracer(project string, logger log.Logger, cfg jaegercfg.Configuration) (
 		jaegercfg.Logger(logger),
 	)
 	if err != nil {
-		panic("new tracer: " + err.Error())
+		panic("tracer init: " + err.Error())
 	}
 
 	opentracing.SetGlobalTracer(tracer)
