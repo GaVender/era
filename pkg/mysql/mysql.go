@@ -18,13 +18,14 @@ type (
 	}
 
 	Config struct {
+		Conn        string
 		MaxLifeTime int
 		MaxIdleConn int
 		MaxOpenConn int
 	}
 )
 
-var (
+const (
 	keyBegin = "begin"
 	keyCtx   = "ctx"
 
@@ -35,8 +36,8 @@ var (
 	traceOperationDelete   = "sql: delete : "
 )
 
-func CreateConnection(conn string, cfg Config, tracer opentracing.Tracer, log log.Logger) (DB, func()) {
-	db, err := gorm.Open("mysql", conn)
+func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (DB, func()) {
+	db, err := gorm.Open("mysql", cfg.Conn)
 	if err != nil {
 		panic("mysql init: " + err.Error())
 	}
@@ -45,7 +46,7 @@ func CreateConnection(conn string, cfg Config, tracer opentracing.Tracer, log lo
 	db.SingularTable(true)
 	db.BlockGlobalUpdate(true)
 
-	db.DB().SetConnMaxLifetime(time.Second * time.Duration(cfg.MaxLifeTime))
+	db.DB().SetConnMaxLifetime(time.Millisecond * time.Duration(cfg.MaxLifeTime))
 	db.DB().SetMaxIdleConns(cfg.MaxIdleConn)
 	db.DB().SetMaxOpenConns(cfg.MaxOpenConn)
 
@@ -127,8 +128,8 @@ func CreateConnection(conn string, cfg Config, tracer opentracing.Tracer, log lo
 		}
 }
 
-func (db *DB) FromContext(ctx context.Context) *DB {
-	return &DB{
+func (db DB) WithContext(ctx context.Context) DB {
+	return DB{
 		db.Set(keyCtx, ctx),
 	}
 }
