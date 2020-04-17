@@ -16,12 +16,6 @@ type (
 		*redis.Client
 	}
 
-	hook struct {
-		tracer    opentracing.Tracer
-		log       log.Logger
-		beginTime time.Time
-	}
-
 	Config struct {
 		Addr         string
 		Password     string
@@ -33,6 +27,12 @@ type (
 		PoolSize     int
 		MinIdleConns int
 		IdleTimeout  int
+	}
+
+	hook struct {
+		tracer    opentracing.Tracer
+		log       log.Logger
+		beginTime time.Time
 	}
 )
 
@@ -80,17 +80,17 @@ func (h *hook) BeforeProcess(ctx context.Context, cmd redis.Cmder) (context.Cont
 
 func (h *hook) AfterProcess(ctx context.Context, cmd redis.Cmder) error {
 	duration := time.Now().Sub(h.beginTime).Milliseconds()
+	operationInfo := operationProc + " " + cmd.String()
 
-	operationInfo := fmt.Sprint(operationProc, cmd.String(), " , error: ", cmd.Err())
-	defer h.log.Infof(fmt.Sprint(operationInfo, " , duration: ", duration))
-
-	sqlSp := opentracing.StartSpan(
+	rsp := opentracing.StartSpan(
 		operationInfo,
 		opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
 		opentracing.StartTime(h.beginTime),
-	)
-	sqlSp.Finish()
+	).
+		SetTag("error", cmd.Err())
+	rsp.Finish()
 
+	h.log.Infof(fmt.Sprint(operationInfo, " , duration: ", duration))
 	return nil
 }
 
@@ -102,14 +102,15 @@ func (h *hook) BeforeProcessPipeline(ctx context.Context, cmds []redis.Cmder) (c
 func (h *hook) AfterProcessPipeline(ctx context.Context, cmds []redis.Cmder) error {
 	for _, cmd := range cmds {
 		duration := time.Now().Sub(h.beginTime).Milliseconds()
-		operationInfo := fmt.Sprint(operationProcPipe, cmd.String(), " , error: ", cmd.Err())
+		operationInfo := operationProcPipe + " " + cmd.String()
 
-		sqlSp := opentracing.StartSpan(
+		rsp := opentracing.StartSpan(
 			operationInfo,
 			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
 			opentracing.StartTime(h.beginTime),
-		)
-		sqlSp.Finish()
+		).
+			SetTag("error", cmd.Err())
+		rsp.Finish()
 
 		h.log.Infof(fmt.Sprint(operationInfo, " , duration: ", duration))
 	}
