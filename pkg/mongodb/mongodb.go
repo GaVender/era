@@ -38,8 +38,7 @@ type (
 )
 
 const (
-	operation    = "mongo: "
-	keyBeginTime = "beginTime"
+	operation = "mongo: "
 )
 
 func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (Mongo, func()) {

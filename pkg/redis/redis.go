@@ -38,7 +38,7 @@ type (
 
 const (
 	operationProc     = "redis: "
-	operationProcPipe = "redis pipeline: "
+	operationProcPipe = "redis: pipeline: "
 )
 
 func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (Redis, func()) {
