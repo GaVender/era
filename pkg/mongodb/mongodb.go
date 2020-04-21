@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/opentracing/opentracing-go"
+	"go.mongodb.org/mongo-driver/bson"
 	"go.mongodb.org/mongo-driver/event"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
@@ -29,11 +30,8 @@ type (
 	}
 
 	hook struct {
-		tracer       opentracing.Tracer
-		log          log.Logger
-		beginTime    map[int64]time.Time
-		startedEvent map[int64]*event.CommandStartedEvent
-		sync.Mutex
+		tracer opentracing.Tracer
+		log    log.Logger
 	}
 )
 
@@ -41,13 +39,16 @@ const (
 	operation = "mongo: "
 )
 
+var (
+	beginTime  sync.Map
+	startEvent sync.Map
+)
+
 func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (Mongo, func()) {
 	idleTime := time.Duration(cfg.MaxConnIdleTime)
 	h := hook{
-		tracer:       tracer,
-		log:          log,
-		beginTime:    make(map[int64]time.Time),
-		startedEvent: make(map[int64]*event.CommandStartedEvent),
+		tracer: tracer,
+		log:    log,
 	}
 
 	client, err := mongo.Connect(
@@ -85,10 +86,8 @@ func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (Mongo
 
 func (h hook) start() func(context.Context, *event.CommandStartedEvent) {
 	return func(ctx context.Context, startedEvent *event.CommandStartedEvent) {
-		h.Lock()
-		h.beginTime[startedEvent.RequestID] = time.Now()
-		h.startedEvent[startedEvent.RequestID] = startedEvent
-		h.Unlock()
+		beginTime.Store(startedEvent.RequestID, time.Now())
+		startEvent.Store(startedEvent.RequestID, startedEvent)
 	}
 }
 
@@ -98,23 +97,33 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 			return
 		}
 
-		h.Lock()
+		startTime, ok := beginTime.Load(succeededEvent.RequestID)
+		if !ok {
+			startTime = time.Now()
+		}
+		startedEvent, ok := startEvent.Load(succeededEvent.RequestID)
+		command := bson.Raw{}
+		if ok {
+			if _, ok := startedEvent.(*event.CommandStartedEvent); ok {
+				command = startedEvent.(*event.CommandStartedEvent).Command
+			}
+		}
+
 		operationInfo := operation + succeededEvent.CommandName
 
 		msp := h.tracer.StartSpan(
 			operationInfo,
 			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-			opentracing.StartTime(h.beginTime[succeededEvent.RequestID]),
+			opentracing.StartTime(startTime.(time.Time)),
 		).
 			SetTag("mongodb request id", succeededEvent.RequestID).
-			SetTag("command", h.startedEvent[succeededEvent.RequestID].Command).
+			SetTag("command", command).
 			SetTag("result", succeededEvent.Reply.String())
 		msp.Finish()
 
 		h.log.Infof(fmt.Sprint(operationInfo, " , duration: ", succeededEvent.DurationNanos/1e6))
-		delete(h.beginTime, succeededEvent.RequestID)
-		delete(h.startedEvent, succeededEvent.RequestID)
-		h.Unlock()
+		beginTime.Delete(succeededEvent.RequestID)
+		startEvent.Delete(succeededEvent.RequestID)
 	}
 }
 
@@ -124,22 +133,32 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 			return
 		}
 
-		h.Lock()
+		startTime, ok := beginTime.Load(failedEvent.RequestID)
+		if !ok {
+			startTime = time.Now()
+		}
+		startedEvent, ok := startEvent.Load(failedEvent.RequestID)
+		command := bson.Raw{}
+		if ok {
+			if _, ok := startedEvent.(*event.CommandStartedEvent); ok {
+				command = startedEvent.(*event.CommandStartedEvent).Command
+			}
+		}
+
 		operationInfo := operation + failedEvent.CommandName
 
 		msp := h.tracer.StartSpan(
 			operationInfo,
 			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-			opentracing.StartTime(h.beginTime[failedEvent.RequestID]),
+			opentracing.StartTime(startTime.(time.Time)),
 		).
 			SetTag("mongodb request id", failedEvent.RequestID).
-			SetTag("command", h.startedEvent[failedEvent.RequestID].Command).
+			SetTag("command", command).
 			SetTag("error", failedEvent.Failure)
 		msp.Finish()
 
 		h.log.Errorf(fmt.Sprint(operationInfo, " , duration: ", failedEvent.DurationNanos/1e6))
-		delete(h.beginTime, failedEvent.RequestID)
-		delete(h.startedEvent, failedEvent.RequestID)
-		h.Unlock()
+		beginTime.Delete(failedEvent.RequestID)
+		startEvent.Delete(failedEvent.RequestID)
 	}
 }
