@@ -40,7 +40,7 @@ const (
 )
 
 var (
-	beginTime  sync.Map
+	startTime  sync.Map
 	startEvent sync.Map
 )
 
@@ -86,7 +86,7 @@ func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (Mongo
 
 func (h hook) start() func(context.Context, *event.CommandStartedEvent) {
 	return func(ctx context.Context, startedEvent *event.CommandStartedEvent) {
-		beginTime.Store(startedEvent.RequestID, time.Now())
+		startTime.Store(startedEvent.RequestID, time.Now())
 		startEvent.Store(startedEvent.RequestID, startedEvent)
 	}
 }
@@ -97,9 +97,9 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 			return
 		}
 
-		startTime, ok := beginTime.Load(succeededEvent.RequestID)
+		startedTime, ok := startTime.Load(succeededEvent.RequestID)
 		if !ok {
-			startTime = time.Now()
+			startedTime = time.Now()
 		}
 		startedEvent, ok := startEvent.Load(succeededEvent.RequestID)
 		command := bson.Raw{}
@@ -114,7 +114,7 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 		msp := h.tracer.StartSpan(
 			operationInfo,
 			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-			opentracing.StartTime(startTime.(time.Time)),
+			opentracing.StartTime(startedTime.(time.Time)),
 		).
 			SetTag("mongodb request id", succeededEvent.RequestID).
 			SetTag("command", command).
@@ -122,7 +122,7 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 		msp.Finish()
 
 		h.log.Infof(fmt.Sprint(operationInfo, " , duration: ", succeededEvent.DurationNanos/1e6))
-		beginTime.Delete(succeededEvent.RequestID)
+		startTime.Delete(succeededEvent.RequestID)
 		startEvent.Delete(succeededEvent.RequestID)
 	}
 }
@@ -133,9 +133,9 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 			return
 		}
 
-		startTime, ok := beginTime.Load(failedEvent.RequestID)
+		startedTime, ok := startTime.Load(failedEvent.RequestID)
 		if !ok {
-			startTime = time.Now()
+			startedTime = time.Now()
 		}
 		startedEvent, ok := startEvent.Load(failedEvent.RequestID)
 		command := bson.Raw{}
@@ -150,7 +150,7 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 		msp := h.tracer.StartSpan(
 			operationInfo,
 			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-			opentracing.StartTime(startTime.(time.Time)),
+			opentracing.StartTime(startedTime.(time.Time)),
 		).
 			SetTag("mongodb request id", failedEvent.RequestID).
 			SetTag("command", command).
@@ -158,7 +158,7 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 		msp.Finish()
 
 		h.log.Errorf(fmt.Sprint(operationInfo, " , duration: ", failedEvent.DurationNanos/1e6))
-		beginTime.Delete(failedEvent.RequestID)
+		startTime.Delete(failedEvent.RequestID)
 		startEvent.Delete(failedEvent.RequestID)
 	}
 }
