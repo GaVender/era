@@ -13,16 +13,25 @@ import (
 )
 
 type (
-	DB struct {
-		*gorm.DB
-	}
-
 	Config struct {
 		Conn        string
+		DBName      string
 		MaxLifeTime int
 		MaxIdleConn int
 		MaxOpenConn int
 	}
+
+	Client struct {
+		*gorm.DB
+		logger          log.Logger
+		tracer          opentracing.Tracer
+		db              string
+		ableMonitor     bool
+		monitorInterval time.Duration
+		close           chan bool
+	}
+
+	Option func(db *Client)
 )
 
 const (
@@ -32,101 +41,181 @@ const (
 	operation = "mysql: "
 )
 
-func NewConnection(cfg Config, tracer opentracing.Tracer, log log.Logger) (DB, func()) {
+func NewClient(cfg Config, opts ...Option) (Client, func()) {
+	if len(cfg.DBName) == 0 {
+		panic("mysql config without db name")
+	}
+
 	db, err := gorm.Open("mysql", cfg.Conn)
 	if err != nil {
 		panic("mysql init: " + err.Error())
 	}
 
-	db.SetLogger(log)
 	db.SingularTable(true)
 	db.BlockGlobalUpdate(true)
-
 	db.DB().SetConnMaxLifetime(time.Millisecond * time.Duration(cfg.MaxLifeTime))
 	db.DB().SetMaxIdleConns(cfg.MaxIdleConn)
 	db.DB().SetMaxOpenConns(cfg.MaxOpenConn)
 
+	client := Client{
+		db:    cfg.DBName,
+		close: make(chan bool),
+	}
+
+	for _, opt := range opts {
+		opt(&client)
+	}
+
+	if client.logger == nil {
+		client.logger = log.NullLogger{}
+	}
+	db.SetLogger(client.logger)
+	client.DB = db
+
 	scopeBegin := func(scope *gorm.Scope) {
 		scope.Set(keyBegin, time.Now())
 	}
-	scopeTrace := func(scope *gorm.Scope, t opentracing.Tracer) {
+	scopeTrace := func(scope *gorm.Scope) {
 		beginTime, ok := scope.Get(keyBegin)
 		if !ok {
 			beginTime = time.Now()
 		}
 
-		var duration int64
+		var duration time.Duration
 		if bt, ok := beginTime.(time.Time); ok {
-			duration = time.Now().Sub(bt).Milliseconds()
+			duration = time.Now().Sub(bt)
 		}
 
 		operationInfo := fmt.Sprint(operation, scope.SQL, " , args: ", scope.SQLVars)
-		if oldCtx, ok := scope.Get(keyCtx); ok {
-			if ctx, ok := oldCtx.(context.Context); ok {
-				sqlSp := opentracing.StartSpan(
-					operationInfo,
-					opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-					opentracing.StartTime(beginTime.(time.Time)),
-				).
-					SetTag("rowsAffected", scope.DB().RowsAffected).
-					SetTag("error", scope.DB().Error)
-				sqlSp.Finish()
+
+		if client.tracer != nil {
+			if oldCtx, ok := scope.Get(keyCtx); ok {
+				if ctx, ok := oldCtx.(context.Context); ok {
+					sqlSp := client.tracer.StartSpan(
+						operationInfo,
+						opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
+						opentracing.StartTime(beginTime.(time.Time)),
+					).
+						SetTag("rowsAffected", scope.DB().RowsAffected).
+						SetTag("error", scope.DB().Error)
+					sqlSp.Finish()
+				} else {
+					client.logger.Errorf("mysql transform trace ctx fail: %v", oldCtx)
+				}
 			} else {
-				log.Errorf("mysql transform trace ctx fail: %v", oldCtx)
+				client.logger.Errorf("mysql get trace ctx fail")
 			}
-		} else {
-			log.Error("mysql get trace ctx fail")
 		}
 
-		log.Infof(fmt.Sprint(operationInfo, " , duration: ", duration))
+		if client.ableMonitor {
+			metricsMysqlQueryCounter.WithLabelValues(client.db, scope.SQL).Inc()
+			metricsMysqlDurationHistogram.WithLabelValues(client.db, fmt.Sprint(scope.SQL, scope.SQLVars)).
+				Observe(float64(duration.Milliseconds()))
+		}
+
+		client.logger.Infof(fmt.Sprint(operationInfo, " , duration: ", duration.Milliseconds()))
 	}
 
 	db.Callback().Query().Before("gorm:query").Register("query-before-1", func(scope *gorm.Scope) {
 		scopeBegin(scope)
 	})
 	db.Callback().Query().After("gorm:query").Register("query-after-1", func(scope *gorm.Scope) {
-		scopeTrace(scope, tracer)
+		scopeTrace(scope)
 	})
 
 	db.Callback().RowQuery().Before("gorm:row_query").Register("row-query-before-1", func(scope *gorm.Scope) {
 		scopeBegin(scope)
 	})
 	db.Callback().RowQuery().After("gorm:row_query").Register("row-query-after-1", func(scope *gorm.Scope) {
-		scopeTrace(scope, tracer)
+		scopeTrace(scope)
 	})
 
 	db.Callback().Create().Before("gorm:create").Register("create-before-1", func(scope *gorm.Scope) {
 		scopeBegin(scope)
 	})
 	db.Callback().Create().After("gorm:create").Register("create-after-1", func(scope *gorm.Scope) {
-		scopeTrace(scope, tracer)
+		scopeTrace(scope)
 	})
 
 	db.Callback().Update().Before("gorm:update").Register("update-before-1", func(scope *gorm.Scope) {
 		scopeBegin(scope)
 	})
 	db.Callback().Update().After("gorm:update").Register("update-after-1", func(scope *gorm.Scope) {
-		scopeTrace(scope, tracer)
+		scopeTrace(scope)
 	})
 
 	db.Callback().Delete().Before("gorm:delete").Register("delete-before-1", func(scope *gorm.Scope) {
 		scopeBegin(scope)
 	})
 	db.Callback().Delete().After("gorm:delete").Register("delete-after-1", func(scope *gorm.Scope) {
-		scopeTrace(scope, tracer)
+		scopeTrace(scope)
 	})
 
-	return DB{
-			db,
-		}, func() {
-			if err = db.Close(); err != nil {
-				log.Errorf("mysql close: %s", err.Error())
-			}
+	return client, func() {
+		if err = db.Close(); err != nil {
+			close(client.close)
+			client.logger.Errorf("mysql close: %s", err.Error())
 		}
+	}
 }
 
-func (db DB) WithContext(ctx context.Context) DB {
-	return DB{
-		db.Set(keyCtx, ctx),
+func WithLogger(logger log.Logger) Option {
+	return func(c *Client) {
+		c.logger = logger
 	}
+}
+
+func WithTracer(tracer opentracing.Tracer) Option {
+	return func(c *Client) {
+		c.tracer = tracer
+	}
+}
+
+func WithMonitor(able bool, interval time.Duration) Option {
+	return func(c *Client) {
+		c.ableMonitor = able
+		c.monitorInterval = interval
+	}
+}
+
+func (c *Client) WithContext(ctx context.Context) *Client {
+	c.DB = c.DB.Set(keyCtx, ctx)
+	return c
+}
+
+func (c *Client) PerformanceStats() {
+	if !c.ableMonitor {
+		return
+	}
+
+	c.logger.Infof("mysql performance statistics begin...\n")
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				c.PerformanceStats()
+			}
+		}()
+
+		ticker := time.NewTicker(c.monitorInterval)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				stats := c.DB.DB().Stats()
+
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "max open conn").Set(float64(stats.MaxOpenConnections))
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "open conn").Set(float64(stats.OpenConnections))
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "in use conn").Set(float64(stats.InUse))
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "idle conn").Set(float64(stats.Idle))
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "wait count").Set(float64(stats.WaitCount))
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "wait duration").Set(float64(stats.WaitDuration))
+				metricsMysqlStatsGauge.WithLabelValues(c.db, "max lifetime closed").Set(float64(stats.MaxLifetimeClosed))
+			case <-c.close:
+				c.logger.Infof("mysql stats stop...")
+				return
+			}
+		}
+	}()
 }
