@@ -178,12 +178,12 @@ func WithMonitor(able bool, interval time.Duration) Option {
 	}
 }
 
-func (c *Client) WithContext(ctx context.Context) *Client {
+func (c Client) WithContext(ctx context.Context) Client {
 	c.DB = c.DB.Set(keyCtx, ctx)
 	return c
 }
 
-func (c *Client) PerformanceStats() {
+func (c Client) PerformanceStats() {
 	if !c.ableMonitor {
 		return
 	}
@@ -192,7 +192,8 @@ func (c *Client) PerformanceStats() {
 
 	go func() {
 		defer func() {
-			if r := recover(); r != nil {
+			if err := recover(); err != nil {
+				c.logger.Errorf("mysql performance stats: %v", err)
 				c.PerformanceStats()
 			}
 		}()

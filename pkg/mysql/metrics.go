@@ -10,7 +10,7 @@ var (
 		Namespace: namespace,
 		Subsystem: subsystem,
 		Name:      "query_exec_total",
-		Help:      "Total number of query execution times",
+		Help:      "total number of query execution times",
 	}, []string{
 		"db", "query",
 	})
