@@ -10,7 +10,6 @@ import (
 	"go.uber.org/zap/zapcore"
 
 	"github.com/GaVender/era/config"
-	"github.com/GaVender/era/utils"
 )
 
 type ZapLogger struct {
@@ -36,8 +35,7 @@ func NewZapLogger(project string, isPrd bool, opt ...zap.Option) (*ZapLogger, fu
 		panic("zap logger init: " + err.Error())
 	}
 
-	s := utils.Stack(2)
-	l = l.Named(project).WithOptions(zap.AddCallerSkip(1)).With(zap.String("stack", s.String()))
+	l = l.Named(project).WithOptions(zap.AddCallerSkip(1))
 	return &ZapLogger{l}, func() {
 		if err = l.Sync(); err != nil {
 			panic("zap logger sync: " + err.Error())
