@@ -54,7 +54,7 @@ func NewService(cfg Config, opts ...Option) (*Server, error) {
 
 		go func() {
 			http.Handle("/metrics", promhttp.Handler())
-			s.logger.Errorf("prometheus init: %s", http.ListenAndServe(cfg.Host, nil).Error())
+			panic("prometheus init: " + http.ListenAndServe(cfg.Host, nil).Error())
 		}()
 	}
 
