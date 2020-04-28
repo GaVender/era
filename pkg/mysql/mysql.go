@@ -3,6 +3,7 @@ package mysql
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jinzhu/gorm"
@@ -87,7 +88,7 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 		}
 
 		ctx := context.Background()
-		operationInfo := fmt.Sprint(operation, scope.SQL, " , args: ", scope.SQLVars)
+		operationInfo := fmt.Sprint(operation, strings.ToLower(scope.SQL[0:strings.Index(scope.SQL, " ")]))
 
 		if client.tracer != nil {
 			if oldCtx, ok := scope.Get(keyCtx); ok {
@@ -98,6 +99,8 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 						opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
 						opentracing.StartTime(beginTime.(time.Time)),
 					).
+						SetTag("sql", scope.SQL).
+						SetTag("args", scope.SQLVars).
 						SetTag("rowsAffected", scope.DB().RowsAffected).
 						SetTag("error", scope.DB().Error)
 					sqlSp.Finish()
@@ -115,7 +118,8 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 				Observe(float64(duration.Milliseconds()))
 		}
 
-		client.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", duration.Milliseconds()))
+		client.logger.ContextInfof(ctx, fmt.Sprint(operation, "sql: ", scope.SQL, " , args: ", scope.SQLVars,
+			" , duration: ", duration.Milliseconds()))
 	}
 
 	db.Callback().Query().Before("gorm:query").Register("query-before-1", func(scope *gorm.Scope) {

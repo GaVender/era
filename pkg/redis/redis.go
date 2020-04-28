@@ -155,14 +155,16 @@ func (h *hook) BeforeProcess(ctx context.Context, cmd redis.Cmder) (context.Cont
 
 func (h *hook) AfterProcess(ctx context.Context, cmd redis.Cmder) error {
 	duration := time.Now().Sub(h.beginTime).Milliseconds()
-	operationInfo := operationProc + " " + cmd.String()
+	operationInfo := operationProc + " " + cmd.Name()
 
 	if h.tracer != nil {
 		rsp := h.tracer.StartSpan(
 			operationInfo,
 			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
 			opentracing.StartTime(h.beginTime),
-		).SetTag("error", cmd.Err())
+		).
+			SetTag("command", cmd.String()).
+			SetTag("error", cmd.Err())
 		rsp.Finish()
 	}
 
@@ -171,7 +173,7 @@ func (h *hook) AfterProcess(ctx context.Context, cmd redis.Cmder) error {
 		metricsRedisDurationHistogram.WithLabelValues(cmd.String()).Observe(float64(duration))
 	}
 
-	h.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", duration))
+	h.logger.ContextInfof(ctx, fmt.Sprint(operationProc, "cmd: ", cmd.String(), " , duration: ", duration))
 	return nil
 }
 
@@ -183,14 +185,16 @@ func (h *hook) BeforeProcessPipeline(ctx context.Context, cmds []redis.Cmder) (c
 func (h *hook) AfterProcessPipeline(ctx context.Context, cmds []redis.Cmder) error {
 	for _, cmd := range cmds {
 		duration := time.Now().Sub(h.beginTime).Milliseconds()
-		operationInfo := operationProcPipe + " " + cmd.String()
+		operationInfo := operationProcPipe + " " + cmd.Name()
 
 		if h.tracer != nil {
 			rsp := h.tracer.StartSpan(
 				operationInfo,
 				opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
 				opentracing.StartTime(h.beginTime),
-			).SetTag("error", cmd.Err())
+			).
+				SetTag("command", cmd.String()).
+				SetTag("error", cmd.Err())
 			rsp.Finish()
 		}
 
