@@ -188,7 +188,7 @@ func (c Client) PerformanceStats() {
 		return
 	}
 
-	c.logger.Infof("mysql performance statistics begin...\n")
+	c.logger.Infof("mysql performance statistics begin...")
 
 	go func() {
 		defer func() {

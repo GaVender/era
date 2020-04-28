@@ -1,10 +1,15 @@
 package log
 
 import (
+	"context"
 	"fmt"
 
+	"github.com/opentracing/opentracing-go"
+	"github.com/uber/jaeger-client-go"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
+
+	"github.com/GaVender/era/config"
 )
 
 type ZapLogger struct {
@@ -38,8 +43,27 @@ func NewZapLogger(project string, isPrd bool, opt ...zap.Option) (ZapLogger, fun
 	}
 }
 
+func (z ZapLogger) WithContext(ctx context.Context) ZapLogger {
+	return ZapLogger{
+		Logger: z.Logger.With(zap.String(config.TraceID, z.gerTraceID(ctx))),
+	}
+}
+
+func (z ZapLogger) gerTraceID(ctx context.Context) string {
+	var traceID string
+
+	sp := opentracing.SpanFromContext(ctx)
+	if sp != nil {
+		if jaegerSpanContext, ok := sp.Context().(jaeger.SpanContext); ok {
+			traceID = jaegerSpanContext.TraceID().String()
+		}
+	}
+
+	return traceID
+}
+
 func (z ZapLogger) Error(msg string) {
-	z.With().Debug(msg)
+	z.With().Error(msg)
 }
 
 func (z ZapLogger) Print(v ...interface{}) {

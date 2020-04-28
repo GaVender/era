@@ -116,7 +116,7 @@ func (r Redis) PerformanceStats() {
 		return
 	}
 
-	r.logger.Infof("redis performance statistics begin...\n")
+	r.logger.Infof("redis performance statistics begin...")
 
 	go func() {
 		defer func() {

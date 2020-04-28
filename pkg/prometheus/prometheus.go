@@ -27,6 +27,10 @@ const (
 	defaultHost = ":9191"
 )
 
+var (
+	ErrInvalidHost = errors.New("invalid host")
+)
+
 func NewService(cfg Config, opts ...Option) (*Server, error) {
 	s := &Server{}
 
@@ -44,7 +48,7 @@ func NewService(cfg Config, opts ...Option) (*Server, error) {
 		}
 
 		if strings.Index(cfg.Host, ":") < 0 {
-			err := errors.New("invalid host")
+			err := ErrInvalidHost
 			return nil, err
 		}
 
