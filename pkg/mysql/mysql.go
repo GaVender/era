@@ -86,11 +86,13 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 			duration = time.Now().Sub(bt)
 		}
 
+		ctx := context.Background()
 		operationInfo := fmt.Sprint(operation, scope.SQL, " , args: ", scope.SQLVars)
 
 		if client.tracer != nil {
 			if oldCtx, ok := scope.Get(keyCtx); ok {
-				if ctx, ok := oldCtx.(context.Context); ok {
+				ctx, ok = oldCtx.(context.Context)
+				if ok {
 					sqlSp := client.tracer.StartSpan(
 						operationInfo,
 						opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
@@ -100,10 +102,10 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 						SetTag("error", scope.DB().Error)
 					sqlSp.Finish()
 				} else {
-					client.logger.Errorf("mysql transform trace ctx fail: %v", oldCtx)
+					client.logger.ContextErrorf(ctx, "mysql transform trace ctx fail: %v", oldCtx)
 				}
 			} else {
-				client.logger.Errorf("mysql get trace ctx fail")
+				client.logger.ContextErrorf(ctx, "mysql get trace ctx fail")
 			}
 		}
 
@@ -113,7 +115,7 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 				Observe(float64(duration.Milliseconds()))
 		}
 
-		client.logger.Infof(fmt.Sprint(operationInfo, " , duration: ", duration.Milliseconds()))
+		client.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", duration.Milliseconds()))
 	}
 
 	db.Callback().Query().Before("gorm:query").Register("query-before-1", func(scope *gorm.Scope) {

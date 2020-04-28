@@ -171,7 +171,7 @@ func (h *hook) AfterProcess(ctx context.Context, cmd redis.Cmder) error {
 		metricsRedisDurationHistogram.WithLabelValues(cmd.String()).Observe(float64(duration))
 	}
 
-	h.logger.Infof(fmt.Sprint(operationInfo, " , duration: ", duration))
+	h.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", duration))
 	return nil
 }
 
@@ -199,7 +199,7 @@ func (h *hook) AfterProcessPipeline(ctx context.Context, cmds []redis.Cmder) err
 			metricsRedisDurationHistogram.WithLabelValues(cmd.String()).Observe(float64(duration))
 		}
 
-		h.logger.Infof(fmt.Sprint(operationInfo, " , duration: ", duration))
+		h.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", duration))
 	}
 
 	return nil

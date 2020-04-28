@@ -165,7 +165,7 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 				Observe(float64(succeededEvent.DurationNanos / 1e6))
 		}
 
-		h.logger.Infof(fmt.Sprint(operationInfo, " , duration: ", succeededEvent.DurationNanos/1e6))
+		h.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", succeededEvent.DurationNanos/1e6))
 		startTime.Delete(succeededEvent.RequestID)
 		startEvent.Delete(succeededEvent.RequestID)
 	}
@@ -207,7 +207,7 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 				Observe(float64(failedEvent.DurationNanos / 1e6))
 		}
 
-		h.logger.Errorf(fmt.Sprint(operationInfo, " , duration: ", failedEvent.DurationNanos/1e6))
+		h.logger.ContextErrorf(ctx, fmt.Sprint(operationInfo, " , duration: ", failedEvent.DurationNanos/1e6))
 		startTime.Delete(failedEvent.RequestID)
 		startEvent.Delete(failedEvent.RequestID)
 	}
