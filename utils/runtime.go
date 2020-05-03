@@ -13,14 +13,15 @@ func Stack(skip int) (s bytes.Buffer) {
 
 	if f != nil {
 		for {
-			if nf, ok := f.Next(); ok {
-				s.WriteString(nf.File)
-				s.WriteRune(':')
-				s.WriteString(strconv.Itoa(nf.Line))
-				s.WriteString("\n")
-			} else {
+			nf, ok := f.Next()
+			if !ok {
 				break
 			}
+
+			s.WriteString(nf.File)
+			s.WriteRune(':')
+			s.WriteString(strconv.Itoa(nf.Line))
+			s.WriteString("\n")
 		}
 	}
 
