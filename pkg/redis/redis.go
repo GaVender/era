@@ -158,14 +158,25 @@ func (h *hook) AfterProcess(ctx context.Context, cmd redis.Cmder) error {
 	operationInfo := operationProc + " " + cmd.Name()
 
 	if h.tracer != nil {
-		rsp := h.tracer.StartSpan(
-			operationInfo,
-			opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-			opentracing.StartTime(h.beginTime),
-		).
-			SetTag("command", cmd.String()).
-			SetTag("error", cmd.Err())
-		rsp.Finish()
+		var childSp opentracing.Span
+		sp := opentracing.SpanFromContext(ctx)
+		if sp == nil {
+			childSp, ctx = opentracing.StartSpanFromContextWithTracer(
+				ctx,
+				h.tracer,
+				operationInfo,
+				opentracing.StartTime(h.beginTime),
+			)
+		} else {
+			childSp = h.tracer.StartSpan(
+				operationInfo,
+				opentracing.ChildOf(sp.Context()),
+				opentracing.StartTime(h.beginTime),
+			)
+		}
+
+		childSp.SetTag("command", cmd.String()).SetTag("error", cmd.Err())
+		childSp.Finish()
 	}
 
 	if h.ableMonitor {
@@ -188,14 +199,20 @@ func (h *hook) AfterProcessPipeline(ctx context.Context, cmds []redis.Cmder) err
 		operationInfo := operationProcPipe + " " + cmd.Name()
 
 		if h.tracer != nil {
-			rsp := h.tracer.StartSpan(
-				operationInfo,
-				opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-				opentracing.StartTime(h.beginTime),
-			).
-				SetTag("command", cmd.String()).
-				SetTag("error", cmd.Err())
-			rsp.Finish()
+			var childSp opentracing.Span
+			sp := opentracing.SpanFromContext(ctx)
+			if sp == nil {
+				childSp, ctx = opentracing.StartSpanFromContext(ctx, operationInfo)
+			} else {
+				childSp = h.tracer.StartSpan(
+					operationInfo,
+					opentracing.ChildOf(sp.Context()),
+					opentracing.StartTime(h.beginTime),
+				)
+			}
+
+			childSp.SetTag("command", cmd.String()).SetTag("error", cmd.Err())
+			childSp.Finish()
 		}
 
 		if h.ableMonitor {

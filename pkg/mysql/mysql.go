@@ -94,16 +94,28 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 			if oldCtx, ok := scope.Get(keyCtx); ok {
 				ctx, ok = oldCtx.(context.Context)
 				if ok {
-					sqlSp := client.tracer.StartSpan(
-						operationInfo,
-						opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-						opentracing.StartTime(beginTime.(time.Time)),
-					).
-						SetTag("sql", scope.SQL).
+					var childSp opentracing.Span
+					sp := opentracing.SpanFromContext(ctx)
+					if sp == nil {
+						childSp, ctx = opentracing.StartSpanFromContextWithTracer(
+							ctx,
+							client.tracer,
+							operationInfo,
+							opentracing.StartTime(beginTime.(time.Time)),
+						)
+					} else {
+						childSp = client.tracer.StartSpan(
+							operationInfo,
+							opentracing.ChildOf(sp.Context()),
+							opentracing.StartTime(beginTime.(time.Time)),
+						)
+					}
+
+					childSp.SetTag("sql", scope.SQL).
 						SetTag("args", scope.SQLVars).
 						SetTag("rowsAffected", scope.DB().RowsAffected).
 						SetTag("error", scope.DB().Error)
-					sqlSp.Finish()
+					childSp.Finish()
 				} else {
 					client.logger.ContextErrorf(ctx, "mysql transform trace ctx fail: %v", oldCtx)
 				}

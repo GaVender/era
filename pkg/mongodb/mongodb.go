@@ -148,25 +148,37 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 		operationInfo := operation + succeededEvent.CommandName
 
 		if h.tracer != nil {
-			msp := h.tracer.StartSpan(
-				operationInfo,
-				opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-				opentracing.StartTime(startedTime.(time.Time)),
-			).
-				SetTag("mongodb request id", succeededEvent.RequestID).
+			var childSp opentracing.Span
+			sp := opentracing.SpanFromContext(ctx)
+			if sp == nil {
+				childSp, ctx = opentracing.StartSpanFromContextWithTracer(
+					ctx,
+					h.tracer,
+					operationInfo,
+					opentracing.StartTime(startedTime.(time.Time)),
+				)
+			} else {
+				childSp = h.tracer.StartSpan(
+					operationInfo,
+					opentracing.ChildOf(sp.Context()),
+					opentracing.StartTime(startedTime.(time.Time)),
+				)
+			}
+
+			childSp.SetTag("mongodb request id", succeededEvent.RequestID).
 				SetTag("command", startedEvent.Command).
 				SetTag("result", succeededEvent.Reply.String())
-			msp.Finish()
+			childSp.Finish()
 		}
 
 		if h.ableMonitor {
 			metricsMongodbQueryCounter.WithLabelValues(startedEvent.DatabaseName, succeededEvent.CommandName, "success").Inc()
 			metricsMongodbDurationHistogram.WithLabelValues(startedEvent.DatabaseName, startedEvent.Command.String()).
-				Observe(float64(succeededEvent.DurationNanos / 1e6))
+				Observe(float64(time.Duration(succeededEvent.DurationNanos).Milliseconds()))
 		}
 
 		h.logger.ContextInfof(ctx, fmt.Sprint(operation, "command: ", startedEvent.Command,
-			" , duration: ", succeededEvent.DurationNanos/1e6))
+			" , duration: ", time.Duration(succeededEvent.DurationNanos).Milliseconds()))
 		startTime.Delete(succeededEvent.RequestID)
 		startEvent.Delete(succeededEvent.RequestID)
 	}
@@ -191,24 +203,36 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 		operationInfo := operation + failedEvent.CommandName
 
 		if h.tracer != nil {
-			msp := h.tracer.StartSpan(
-				operationInfo,
-				opentracing.ChildOf(opentracing.SpanFromContext(ctx).Context()),
-				opentracing.StartTime(startedTime.(time.Time)),
-			).
-				SetTag("mongodb request id", failedEvent.RequestID).
+			var childSp opentracing.Span
+			sp := opentracing.SpanFromContext(ctx)
+			if sp == nil {
+				childSp, ctx = opentracing.StartSpanFromContextWithTracer(
+					ctx,
+					h.tracer,
+					operationInfo,
+					opentracing.StartTime(startedTime.(time.Time)),
+				)
+			} else {
+				childSp = h.tracer.StartSpan(
+					operationInfo,
+					opentracing.ChildOf(sp.Context()),
+					opentracing.StartTime(startedTime.(time.Time)),
+				)
+			}
+
+			childSp.SetTag("mongodb request id", failedEvent.RequestID).
 				SetTag("command", startedEvent.Command).
 				SetTag("error", failedEvent.Failure)
-			msp.Finish()
+			childSp.Finish()
 		}
 
 		if h.ableMonitor {
 			metricsMongodbQueryCounter.WithLabelValues(startedEvent.DatabaseName, failedEvent.CommandName, "fail").Inc()
 			metricsMongodbDurationHistogram.WithLabelValues(startedEvent.DatabaseName, startedEvent.Command.String()).
-				Observe(float64(failedEvent.DurationNanos / 1e6))
+				Observe(float64(time.Duration(failedEvent.DurationNanos).Milliseconds()))
 		}
 
-		h.logger.ContextErrorf(ctx, fmt.Sprint(operationInfo, " , duration: ", failedEvent.DurationNanos/1e6))
+		h.logger.ContextErrorf(ctx, fmt.Sprint(operationInfo, " , duration: ", time.Duration(failedEvent.DurationNanos).Milliseconds()))
 		startTime.Delete(failedEvent.RequestID)
 		startEvent.Delete(failedEvent.RequestID)
 	}

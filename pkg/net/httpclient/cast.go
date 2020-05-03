@@ -62,7 +62,12 @@ func (c *Client) Send(ctx context.Context, request *cast.Request) (resp *cast.Re
 		var childSp opentracing.Span
 		sp := opentracing.SpanFromContext(ctx)
 		if sp == nil {
-			childSp, ctx = opentracing.StartSpanFromContext(ctx, operationInfo)
+			childSp, ctx = opentracing.StartSpanFromContextWithTracer(
+				ctx,
+				c.tracer,
+				operationInfo,
+				opentracing.StartTime(beginTime),
+			)
 		} else {
 			childSp = c.tracer.StartSpan(
 				operationInfo,
