@@ -180,8 +180,8 @@ func (h *hook) AfterProcess(ctx context.Context, cmd redis.Cmder) error {
 	}
 
 	if h.ableMonitor {
-		metricsRedisCmdCounter.WithLabelValues(cmd.String()).Inc()
-		metricsRedisDurationHistogram.WithLabelValues(cmd.String()).Observe(float64(duration))
+		metricsRedisCmdCounter.WithLabelValues(cmd.Name()).Inc()
+		metricsRedisDurationHistogram.WithLabelValues(cmd.Name()).Observe(float64(duration))
 	}
 
 	h.logger.ContextInfof(ctx, fmt.Sprint(operationProc, "cmd: ", cmd.String(), " , duration: ", duration))
@@ -216,8 +216,8 @@ func (h *hook) AfterProcessPipeline(ctx context.Context, cmds []redis.Cmder) err
 		}
 
 		if h.ableMonitor {
-			metricsRedisCmdCounter.WithLabelValues(cmd.String()).Inc()
-			metricsRedisDurationHistogram.WithLabelValues(cmd.String()).Observe(float64(duration))
+			metricsRedisCmdCounter.WithLabelValues(cmd.Name()).Inc()
+			metricsRedisDurationHistogram.WithLabelValues(cmd.Name()).Observe(float64(duration))
 		}
 
 		h.logger.ContextInfof(ctx, fmt.Sprint(operationInfo, " , duration: ", duration))

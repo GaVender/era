@@ -1,4 +1,4 @@
-package httpclient
+package ehttp
 
 import (
 	"context"
@@ -15,8 +15,9 @@ import (
 type (
 	Client struct {
 		*cast.Cast
-		tracer opentracing.Tracer
-		logger log.Logger
+		tracer      opentracing.Tracer
+		logger      log.Logger
+		ableMonitor bool
 	}
 )
 
@@ -45,6 +46,11 @@ func (c *Client) WithTracer(tracer opentracing.Tracer) *Client {
 
 func (c *Client) WithLogger(logger log.Logger) *Client {
 	c.logger = logger
+	return c
+}
+
+func (c *Client) WithMonitor(able bool) *Client {
+	c.ableMonitor = able
 	return c
 }
 
@@ -90,6 +96,14 @@ func (c *Client) Send(ctx context.Context, request *cast.Request) (resp *cast.Re
 				SetTag("status code", resp.StatusCode()).
 				SetTag("response", string(resp.Body()))
 			childSp.Finish()
+		}()
+	}
+
+	if c.ableMonitor {
+		defer func() {
+			metricsHttpRequestCounter.WithLabelValues(c.GetBaseURL()).Inc()
+			metricsHttpRequestDurationHistogram.WithLabelValues(c.GetBaseURL()).
+				Observe(float64(time.Now().Sub(beginTime).Milliseconds()))
 		}()
 	}
 

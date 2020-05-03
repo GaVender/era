@@ -126,8 +126,7 @@ func NewClient(cfg Config, opts ...Option) (Client, func()) {
 
 		if client.ableMonitor {
 			metricsMysqlQueryCounter.WithLabelValues(client.db, scope.SQL).Inc()
-			metricsMysqlDurationHistogram.WithLabelValues(client.db, fmt.Sprint(scope.SQL, scope.SQLVars)).
-				Observe(float64(duration.Milliseconds()))
+			metricsMysqlDurationHistogram.WithLabelValues(client.db, scope.SQL).Observe(float64(duration.Milliseconds()))
 		}
 
 		client.logger.ContextInfof(ctx, fmt.Sprint(operation, "sql: ", scope.SQL, " , args: ", scope.SQLVars,

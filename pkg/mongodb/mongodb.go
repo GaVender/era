@@ -173,7 +173,7 @@ func (h hook) succeed() func(context.Context, *event.CommandSucceededEvent) {
 
 		if h.ableMonitor {
 			metricsMongodbQueryCounter.WithLabelValues(startedEvent.DatabaseName, succeededEvent.CommandName, "success").Inc()
-			metricsMongodbDurationHistogram.WithLabelValues(startedEvent.DatabaseName, startedEvent.Command.String()).
+			metricsMongodbDurationHistogram.WithLabelValues(startedEvent.DatabaseName, startedEvent.CommandName).
 				Observe(float64(time.Duration(succeededEvent.DurationNanos).Milliseconds()))
 		}
 
@@ -228,7 +228,7 @@ func (h hook) fail() func(context.Context, *event.CommandFailedEvent) {
 
 		if h.ableMonitor {
 			metricsMongodbQueryCounter.WithLabelValues(startedEvent.DatabaseName, failedEvent.CommandName, "fail").Inc()
-			metricsMongodbDurationHistogram.WithLabelValues(startedEvent.DatabaseName, startedEvent.Command.String()).
+			metricsMongodbDurationHistogram.WithLabelValues(startedEvent.DatabaseName, startedEvent.CommandName).
 				Observe(float64(time.Duration(failedEvent.DurationNanos).Milliseconds()))
 		}
 
