@@ -1,0 +1,20 @@
+{{define "db2struct"}}
+    // DO NOT EDIT.
+
+    package {{.PkgName}}
+
+    {{range .Tables}}
+        {{$tableName := snake2camel .Name}}
+        // {{.Comment}}
+        type {{$tableName}} struct {
+        {{range .Columns}}
+            {{snake2camel .Field}} {{columnMapper .Type .Null}} {{.Tag}} // {{.Comment | replace "\n" " "}}
+        {{- end}}
+        }
+
+        func (t *{{$tableName}}) TableName() string {
+            return "{{.Name}}"
+        }
+
+    {{end}}
+{{end}}
