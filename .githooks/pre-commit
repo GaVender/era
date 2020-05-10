@@ -1,0 +1,3 @@
+#!/bin/sh
+#make wire
+golangci-lint run --build-tags wireinject
